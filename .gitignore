@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+ENV/
+.env
+
+# Configuration and Credentials
+config.py
+*.json
+credentials.json
+gcp-service-acc-credentials.json
+
+# IDE specific files
+.idea/
+.vscode/
