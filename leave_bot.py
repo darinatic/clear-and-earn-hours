@@ -46,6 +46,73 @@ class LeaveRequest:
         self.supervisor_approval = None
         self.supervisor_id = None
 
+# function to check leave balance
+async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Check user's leave balance"""
+    user = update.effective_user
+    
+    try:
+        # Open the spreadsheet
+        worksheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        
+        # Find user's row by Telegram ID
+        cell = worksheet.find(str(user.id))
+        if cell:
+            row = cell.row
+            
+            # Get user's leave balance
+            balance = float(worksheet.cell(row, 4).value)
+            
+            # Get leave history for current month
+            history_sheet = client.open_by_key(SPREADSHEET_ID).worksheet("Leave History")
+            all_records = history_sheet.get_all_records()
+            
+            # Filter records for current user and current month
+            current_month = datetime.now().strftime("%Y-%m")
+            month_records = [
+                record for record in all_records 
+                if record.get('Telegram ID', '') == str(user.id) and 
+                record.get('Timestamp', '').startswith(current_month)
+            ]
+            
+            # Calculate total hours taken this month
+            month_hours = sum(float(record.get('Total Hours', 0)) for record in month_records)
+            
+            # Prepare the response message
+            message = (
+                f"📊 Leave Balance Information\n\n"
+                f"Current Balance: {balance:.1f} hours\n"
+                f"Hours taken this month: {month_hours:.1f} hours\n\n"
+            )
+            
+            # Add recent leave history if any
+            if month_records:
+                message += "Recent Leave History (This Month):\n"
+                for record in month_records:
+                    message += (
+                        f"- {record.get('Start Date')} to {record.get('End Date')}: "
+                        f"{record.get('Total Hours')} hours\n"
+                        f"  Remarks: {record.get('Remarks')}\n"
+                    )
+            else:
+                message += "No leave taken this month.\n"
+            
+            await update.message.reply_text(message)
+            
+        else:
+            await update.message.reply_text(
+                "❌ Error: Your Telegram ID is not found in the system.\n"
+                "Please contact your administrator."
+            )
+            
+    except Exception as e:
+        print(f"Error checking balance: {e}")
+        await update.message.reply_text(
+            "❌ Error checking leave balance. Please try again later or contact administrator."
+        )
+
+
+
 def format_hours_display(leave_request):
     """Helper function to format hours display"""
     hours_display = []
@@ -70,7 +137,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Your Telegram ID: {user.id}\n"
         f"Your Display Name: {user.full_name}\n"
         f"Your Username: @{user.username if user.username else 'not set'}\n\n"
-        "Use /request to start a new leave request.\n"
+        "Available commands:\n"
+        "/request - Start a new leave request\n"
+        "/balance - Check your leave balance\n"
+        "/cancel - Cancel current leave request"
     )
 
 async def request_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -437,6 +507,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(conv_handler)
     application.add_handler(CallbackQueryHandler(handle_response))
+    application.add_handler(CommandHandler("balance", check_balance))
 
     # Start bot
     application.run_polling()
